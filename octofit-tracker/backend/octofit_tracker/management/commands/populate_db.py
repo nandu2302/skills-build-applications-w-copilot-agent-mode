@@ -6,12 +6,30 @@ class Command(BaseCommand):
     help = 'Populate the octofit_db database with test data'
 
     def handle(self, *args, **options):
-        # Clear existing data
-        Activity.objects.all().delete()
-        Leaderboard.objects.all().delete()
-        User.objects.all().delete()
-        Team.objects.all().delete()
-        Workout.objects.all().delete()
+        # Clear existing data. Some earlier records may lack primary keys
+        # which causes Django's collector to raise TypeError when deleting.
+        # Use a safe delete with a fallback to raw collection deletion.
+        def safe_clear(qs, model_name):
+            try:
+                print(f"Clearing {model_name} via ORM delete")
+                qs.delete()
+            except TypeError:
+                # Fallback for malformed records: try to use model's collection accessor
+                print(f"TypeError while deleting {model_name} via ORM, attempting raw collection delete")
+                try:
+                    # djongo may expose _get_collection() on the model
+                    coll = qs.model._get_collection()
+                    coll.delete_many({})
+                except Exception:
+                    # Last resort: delete records that do have valid primary keys
+                    print(f"Raw collection access failed for {model_name}; deleting records with primary keys only")
+                    qs.model.objects.filter(pk__isnull=False).delete()
+
+        safe_clear(Activity.objects.all(), 'Activity')
+        safe_clear(Leaderboard.objects.all(), 'Leaderboard')
+        safe_clear(User.objects.all(), 'User')
+        safe_clear(Team.objects.all(), 'Team')
+        safe_clear(Workout.objects.all(), 'Workout')
 
         # Create Teams
         marvel = Team.objects.create(name='marvel', description='Marvel Superheroes')
