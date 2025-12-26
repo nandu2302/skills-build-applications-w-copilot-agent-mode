@@ -18,6 +18,7 @@ from django.contrib import admin
 from django.urls import path, include
 from rest_framework import routers
 from . import views
+import os
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
 
@@ -30,6 +31,32 @@ router.register(r'workouts', views.WorkoutViewSet)
 
 @api_view(['GET'])
 def api_root(request, format=None):
+    """Return API root using Codespace hostname when available.
+
+    If the environment variable CODESPACE_NAME is set we construct the
+    canonical API URLs using the Codespaces app hostname:
+    https://$CODESPACE_NAME-8000.app.github.dev/api/<component>/
+
+    Fallback: use request.build_absolute_uri() when CODESPACE_NAME is not set.
+    """
+    codespace = os.environ.get('CODESPACE_NAME')
+    if codespace:
+        codespace = codespace.strip()
+        if codespace:
+            base = f"https://{codespace}-8000.app.github.dev/api/"
+        else:
+            base = None
+    else:
+        base = None
+    if base:
+        return Response({
+            'users': base + 'users/',
+            'teams': base + 'teams/',
+            'activities': base + 'activities/',
+            'leaderboard': base + 'leaderboard/',
+            'workouts': base + 'workouts/',
+        })
+
     return Response({
         'users': request.build_absolute_uri('users/'),
         'teams': request.build_absolute_uri('teams/'),
